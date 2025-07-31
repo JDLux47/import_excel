@@ -1,5 +1,7 @@
 import os
 import time
+import openpyxl
+import psycopg2
 from sentence_transformers import SentenceTransformer
 import pandas as pd
 from dotenv import load_dotenv
@@ -12,10 +14,9 @@ PG_DSN = os.getenv("PG_DSN")
 FILE_PATH = os.getenv("FILE_PATH")
 
 COLUMNS = [
-  "Артикул",
-  "Полное наименование лицензии Склад 15 (для прайса, счетов и актов)",
-  "Короткое наименование лицензии Склад 15  (для заголовков и сайта)",
-  "Цена розничная, без НДС"
+    "Артикул",
+    "Короткое наименование\nлицензии Склад 15  (для заголовков и сайта)",
+    "Цена розничная,\nбез НДС"
 ]
 
 MODEL_NAME = "intfloat/multilingual-e5-large-instruct"
