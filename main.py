@@ -49,16 +49,9 @@ def get_column_type(colname):
 
 
 def create_table_from_config(table_name, columns):
-    cols = [Column('id', Integer, primary_key=True, autoincrement=True)]
-    for col in columns:
-        if col == 'id':
-            continue  # уже добавили
-        elif col == 'embedding':
-            cols.append(Column('embedding', Vector(EMB_SIZE)))
-        elif col == 'price':
-            cols.append(Column('price', String))
-        else:
-            cols.append(Column(col, String))
+    if 'id' not in columns:
+        columns = ['id'] + columns
+    cols = [get_column_type(col) for col in columns]
     return Table(table_name, meta, *cols)
 
 
@@ -66,9 +59,16 @@ def make_chunk(row, chunk_fields):
     return " ".join(str(row[field]) for field in chunk_fields if field in row.index and pd.notnull(row[field]))
 
 
-def read_excel_file(excel_path, sheet_name, used_columns):
+def strip_selected_columns(df, columns):
+    for col in columns:
+        if col in df.columns and df[col].dtype == object:
+            df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+    return df
+
+
+def read_excel_file(excel_path, sheet_name, used_columns, header):
     logger.info(f"Read excel file {excel_path} (sheet: {sheet_name})")
-    df = pd.read_excel(excel_path, sheet_name=sheet_name)
+    df = pd.read_excel(excel_path, sheet_name=sheet_name, header=header)
     available_columns = [col for col in used_columns if col in df.columns]
     df = df[available_columns]
     logger.info(f"Found {len(available_columns)} necessary columns: {available_columns}")
@@ -84,6 +84,12 @@ def select_final_columns(df, columns):
     selected = [col for col in columns if col in df.columns]
     logger.info(f"Summary columns: {selected}")
     return df[selected]
+
+
+# откидываем строки, где нет price
+def filter_rows_with_price(df):
+    mask = df['price'].notnull() & (df['price'].astype(str).str.strip() != '')
+    return df[mask]
 
 
 def add_chunk_column(df, chunk_fields):
@@ -113,19 +119,23 @@ def import_excel_to_table(excel_path, table_config):
     table_name = table_config['table_name']
     columns = table_config['columns']
     chunk_fields = table_config['chunk']
-    sheet_name = table_config.get('sheet_name', 0)
+    sheet_name = table_config.get('sheet_name')
     col_map = table_config['excel_column_map']
+    header_num = table_config['header']
 
     table = create_table_from_config(table_name, columns)
     table.drop(engine, checkfirst=True)
     table.create(engine, checkfirst=True)
 
-    df = read_excel_file(excel_path, sheet_name, COLUMNS)
-    df = rename_columns(df, col_map)
-    df = select_final_columns(df, columns)
-    df = add_chunk_column(df, chunk_fields)
-    df = add_embedding(df)
-    insert_into_db(table, df, columns)
+    for sheet in sheet_name:
+        df = read_excel_file(excel_path, sheet, COLUMNS, header_num)
+        df = rename_columns(df, col_map)
+        df = strip_selected_columns(df, col_map.values())
+        df = filter_rows_with_price(df)
+        df = select_final_columns(df, columns)
+        df = add_chunk_column(df, chunk_fields)
+        df = add_embedding(df)
+        insert_into_db(table, df, columns)
 
 
 def main():
