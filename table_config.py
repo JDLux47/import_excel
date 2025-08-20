@@ -34,11 +34,12 @@ TABLE_CONFIGS = {
         'table_name': 'atol_price',
         'sheet_name': [0,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
         'header': 10,
-        'columns': ['article', 'short_name', 'price', 'chunk', 'embedding'],
+        'columns': ['article', 'short_name', 'rrc_price', 'price', 'chunk', 'embedding'],
         'chunk': ['short_name'],
         'excel_column_map': {
             "Код": "article",
             "Товар": "short_name",
+            "Розничная цена": "rrc_price",
             "Золото": "price"
         }
     }
