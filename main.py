@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 import time
 import openpyxl
 import psycopg2
@@ -11,6 +12,12 @@ from pgvector.sqlalchemy import Vector
 import logging
 from columns import COLUMNS
 from table_config import TABLE_CONFIGS
+from natasha import Segmenter, MorphVocab, NewsEmbedding, NewsNERTagger, Doc
+
+segmenter = Segmenter()
+morph_vocab = MorphVocab()
+emb = NewsEmbedding()
+ner_tagger = NewsNERTagger(emb)
 
 load_dotenv()
 PG_DSN = os.getenv("PG_DSN")
@@ -35,6 +42,29 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+def detect_device_types_natasha(text, allowed_types):
+    text_lower = text.lower()
+    found_types = []
+    for dev_type in allowed_types:
+        if not dev_type:
+            continue
+        dev_type_low = re.escape(dev_type.lower())
+        # паттерн откидывает параметры, которые находятся внутри других слов. Например, касса в слове инкассация
+        pattern = r'(?<![a-zа-яё]){}'.format(dev_type_low)
+        if re.search(pattern, text_lower, re.IGNORECASE):
+            found_types.append(dev_type)
+    return ', '.join(found_types) if found_types else ""
+
+
+def add_parameters_column(df, types):
+    logger.info(f"Find types by Natasha from: {types}")
+    df['parameters'] = df['short_name'].apply(
+        lambda x: detect_device_types_natasha(str(x) if x is not None else '', types)
+    )
+    logger.info("Column 'parameters' created.")
+    return df
 
 
 def get_column_type(colname):
@@ -122,6 +152,10 @@ def import_excel_to_table(excel_path, table_config):
     sheet_name = table_config.get('sheet_name')
     col_map = table_config['excel_column_map']
     header_num = table_config['header']
+    types = table_config.get('types')
+
+    if types and "parameters" not in columns:
+        columns = columns + ["parameters"]
 
     table = create_table_from_config(table_name, columns)
     table.drop(engine, checkfirst=True)
@@ -133,6 +167,8 @@ def import_excel_to_table(excel_path, table_config):
         df = strip_selected_columns(df, col_map.values())
         df = filter_rows_with_price(df)
         df = select_final_columns(df, columns)
+        if types:
+            df = add_parameters_column(df, types)
         df = add_chunk_column(df, chunk_fields)
         df = add_embedding(df)
         insert_into_db(table, df, columns)
