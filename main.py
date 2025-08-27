@@ -60,7 +60,7 @@ def detect_device_types_natasha(text, allowed_types):
 
 def add_parameters_column(df, types):
     logger.info(f"Find types by Natasha from: {types}")
-    df['parameters'] = df['short_name'].apply(
+    df['parameters'] = df['chunk'].apply(
         lambda x: detect_device_types_natasha(str(x) if x is not None else '', types)
     )
     logger.info("Column 'parameters' created.")
@@ -93,6 +93,29 @@ def strip_selected_columns(df, columns):
     for col in columns:
         if col in df.columns and df[col].dtype == object:
             df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+    return df
+
+
+# Находим строку подзаголовок (где заполнено только одно поле)
+def detect_category_rows(df, category_col_candidates):
+    mask = df.apply(lambda row: (row.notnull() & (row.astype(str).str.strip() != '')).sum() == 1, axis=1)
+    empty_df = df.where(~mask, other='')
+    cat_series = df[mask].bfill(axis=1).iloc[:, 0]
+    series = pd.Series(index=df.index, dtype='object')
+    series.loc[cat_series.index] = cat_series.values
+    return series
+
+
+# Добавляем столбец category с последним встреченным подзаголовком и удаляем подзаголовк из датафрейма
+def fill_category_column(df):
+    # Находим кандидатов: строки, в которых только одна ячейка непуста
+    cat_series = detect_category_rows(df, df.columns)
+    # Заполняем вниз
+    cat_filled = cat_series.fillna(method='ffill')
+    # Добавляем колонку категории
+    df['category'] = cat_filled
+    # Убираем сами строки-подзаголовки (теперь они отмечены только в cat_series)
+    df = df[cat_series.isnull()]
     return df
 
 
@@ -154,6 +177,9 @@ def import_excel_to_table(excel_path, table_config):
     header_num = table_config['header']
     types = table_config.get('types')
 
+    # Добавим новую колонку заранее, если ее нет
+    if 'category' not in columns:
+        columns = columns + ['category']
     if types and "parameters" not in columns:
         columns = columns + ["parameters"]
 
@@ -163,14 +189,17 @@ def import_excel_to_table(excel_path, table_config):
 
     for sheet in sheet_name:
         df = read_excel_file(excel_path, sheet, COLUMNS, header_num)
+        # 1. Добавляем колонку category из подзаголовков, удаляя сами подзаголовки
+        df = fill_category_column(df)
+        # 2. Приводим к нужным столбцам, далее все шаги как раньше
         df = rename_columns(df, col_map)
         df = strip_selected_columns(df, col_map.values())
         df = filter_rows_with_price(df)
         df = select_final_columns(df, columns)
-        if types:
-            df = add_parameters_column(df, types)
         df = add_chunk_column(df, chunk_fields)
         df = add_embedding(df)
+        if types:
+            df = add_parameters_column(df, types)
         insert_into_db(table, df, columns)
 
 
