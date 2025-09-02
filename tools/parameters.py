@@ -17,12 +17,12 @@ def detect_device_types_natasha(text, allowed_types, synonym_map):
         if not dev_type:
             continue
         dev_type_low = re.escape(dev_type.lower())
-        pattern = r'(?<![a-zа-яё]){}(?![a-zа-яё])'.format(dev_type_low)
+        pattern = r'(?<![a-zа-яё]){}'.format(dev_type_low)
         if re.search(pattern, text_lower, re.IGNORECASE):
             # Попали в группу синонимов если есть, иначе просто слово
             group = synonym_map.get(dev_type.lower(), {dev_type})
             found_synonyms.update(group)
-    return ', '.join(sorted(found_synonyms)) if found_synonyms else ""
+    return sorted(found_synonyms) if found_synonyms else ""
 
 
 # Добавляем колонку с параметрами в датафрейм

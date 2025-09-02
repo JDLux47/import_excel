@@ -1,3 +1,4 @@
+import pandas as pd
 from init_objects import model, logger
 
 
@@ -14,10 +15,10 @@ def add_chunk_column(df, chunk_fields):
     return df
 
 
-# Добавляем в датафрей столбец с векторным представлением
+# Добавляем в датафрейм столбец с векторным представлением
 def add_embedding(df):
     logger.info("Vectorizing chunks, count: %d", len(df))
     embeddings = model.encode(df['chunk'].tolist())
-    df['embedding'] = list(embeddings)
+    df['embedding'] = [emb.tolist() for emb in embeddings]
     logger.info("Column 'embedding' successfully added")
     return df

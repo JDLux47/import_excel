@@ -1,27 +1,5 @@
 import pandas as pd
-from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, Integer, String, Table
-from init_objects import model, engine, meta, EMB_SIZE, logger
-
-
-# Возвращаем объект Column в зависимости от имени столбца
-def get_column_type(colname):
-    if colname == 'id':
-        return Column(colname, Integer, primary_key=True, autoincrement=True)
-    elif colname == 'embedding':
-        return Column(colname, Vector(EMB_SIZE))
-    elif colname == 'price':
-        return Column(colname, String)
-    else:
-        return Column(colname, String)
-
-
-# Создаем табилицу с колонками из конфига и добавляем id
-def create_table_from_config(table_name, columns):
-    if 'id' not in columns:
-        columns = ['id'] + columns
-    cols = [get_column_type(col) for col in columns]
-    return Table(table_name, meta, *cols)
+from init_objects import logger
 
 
 # Удаляем пробелы в начале и конце строк у переданных столбцов
@@ -49,15 +27,6 @@ def select_final_columns(df, columns):
 def filter_rows_with_price(df):
     mask = df['price'].notnull() & (df['price'].astype(str).str.strip() != '')
     return df[mask]
-
-
-# Записываем данные из датафрейма в таблицу базы данных
-def insert_into_db(table, df, columns):
-    logger.info(f"Write {len(df)} rows in table {table.name}")
-    records = df[[col for col in columns if col in df.columns] + ['chunk', 'embedding']].to_dict(orient='records')
-    with engine.begin() as conn:
-        conn.execute(table.insert(), records)
-    logger.info("Data has been successfully recorded")
 
 
 # Читаем файл и возвращаем датафрейм с указанными полями

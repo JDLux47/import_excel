@@ -1,11 +1,13 @@
 import os
+import pandas as pd
 from configs.columns import COLUMNS
 from configs.table_config import TABLE_CONFIGS
-from init_objects import engine
+from tools.db import insert_into_qdrant
+from tools.embedding import add_chunk_column, add_embedding
 from tools.parameters import add_parameters_column
 from tools.titles_handler import fill_category_column
-from tools.tools import create_table_from_config, read_excel_file, rename_columns, strip_selected_columns, \
-    filter_rows_with_price, select_final_columns, add_chunk_column, add_embedding, insert_into_db
+from tools.tools import read_excel_file, rename_columns, strip_selected_columns, filter_rows_with_price, select_final_columns
+
 
 # Основная логика добавления прайса атол
 def import_excel_atol(excel_path):
@@ -26,10 +28,7 @@ def import_excel_atol(excel_path):
     if types and "parameters" not in columns:
         columns = columns + ["parameters"]
 
-    table = create_table_from_config(table_name, columns)
-    table.drop(engine, checkfirst=True)
-    table.create(engine, checkfirst=True)
-
+    dfs = []
     for sheet in sheet_name:
         df = read_excel_file(excel_path, sheet, COLUMNS, header_num)
         # 1. Добавляем колонку category из подзаголовков, удаляя сами подзаголовки
@@ -43,4 +42,7 @@ def import_excel_atol(excel_path):
         df = add_embedding(df)
         if types:
             df = add_parameters_column(df, types)
-        insert_into_db(table, df, columns)
+        dfs.append(df)
+
+    all_df = pd.concat(dfs, ignore_index=True)
+    insert_into_qdrant(table_name, all_df, columns)
