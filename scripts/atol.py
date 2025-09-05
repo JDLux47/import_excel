@@ -3,6 +3,7 @@ import pandas as pd
 from configs.columns import COLUMNS
 from configs.table_config import TABLE_CONFIGS
 from tools.db import insert_into_qdrant
+from tools.duplicates_promo_delete import process_duplicates_with_promo
 from tools.embedding import add_chunk_column, add_embedding
 from tools.parameters import add_parameters_column
 from tools.titles_handler import fill_category_column
@@ -22,18 +23,10 @@ def import_excel_atol(excel_path):
     header_num = table_config['header']
     types = table_config.get('types')
 
-    # Добавим новую колонку заранее, если ее нет
-    if 'category' not in columns:
-        columns = columns + ['category']
-    if types and "parameters" not in columns:
-        columns = columns + ["parameters"]
-
     dfs = []
     for sheet in sheet_name:
         df = read_excel_file(excel_path, sheet, COLUMNS, header_num)
-        # 1. Добавляем колонку category из подзаголовков, удаляя сами подзаголовки
         df = fill_category_column(df)
-        # 2. Приводим к нужным столбцам, далее все шаги как раньше
         df = rename_columns(df, col_map)
         df = strip_selected_columns(df, col_map.values())
         df = filter_rows_with_price(df)
@@ -45,4 +38,5 @@ def import_excel_atol(excel_path):
         dfs.append(df)
 
     all_df = pd.concat(dfs, ignore_index=True)
+    all_df = process_duplicates_with_promo(all_df)
     insert_into_qdrant(table_name, all_df, columns)
